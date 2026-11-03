@@ -2,7 +2,7 @@
 window.A4BUS_CONFIG = {
     // Google Apps Script Web App URL (Deploy > Manage deployments, ends in /exec).
     // Until this is set, records are kept safely on the device and are NOT sent.
-    appsScriptUrl: '',
+    appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxwvFHRKiUrdsHqi1wcGSWProQOpt5HlxhCbHFL9EZeb44alcswaAxnSxPap1kG_740/exec',
 
     projectName: 'A4 Godagama – Avissawella widening (feasibility study)',
 

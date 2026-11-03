@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A4 Survey Admin</title>
+    <meta name="robots" content="noindex">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+</head>
+<body>
+    <!-- Login -->
+    <main id="login" class="login">
+        <form id="login-form" class="login-card" autocomplete="off">
+            <div class="login-icon"><i class="fa-solid fa-chart-column"></i></div>
+            <h1>A4 Survey Admin</h1>
+            <p class="muted">Progress and analysis of the O-D and bus surveys</p>
+            <label for="pw">Admin password</label>
+            <input id="pw" type="password" autocomplete="current-password" required>
+            <button type="submit" id="login-btn" class="btn"><i class="fa-solid fa-right-to-bracket"></i> Log in</button>
+            <p id="login-msg" class="msg" role="alert"></p>
+        </form>
+    </main>
+
+    <!-- Dashboard -->
+    <div id="dash" class="hidden">
+        <header class="top">
+            <div class="brand"><i class="fa-solid fa-chart-column"></i> A4 Survey Admin</div>
+            <nav class="tabs" role="tablist" id="tabs"></nav>
+            <div class="top-actions">
+                <span id="updated" class="muted small"></span>
+                <button id="refresh" class="btn-ghost" title="Refresh now"><i class="fa-solid fa-rotate"></i><span class="hide-sm"> Refresh</span></button>
+                <button id="logout" class="btn-ghost" title="Log out"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        </header>
+        <div class="filters">
+            <label>Station <select id="f-station"></select></label>
+            <label>Date <select id="f-date"></select></label>
+        </div>
+        <main id="view" class="view"></main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

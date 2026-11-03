@@ -2,8 +2,8 @@
  * A4 GODAGAMA - AVISSAWELLA WIDENING (FEASIBILITY STUDY) - ROADSIDE BUS SURVEY
  * APPS SCRIPT BACKEND
  *
- * One row per bus recorded at an O-D station (route, direction, operator,
- * bus size, approximate number of passengers). Bus routes added by enumerators
+ * One row per bus recorded at an O-D station (direction To / From Colombo,
+ * route, operator, bus size, approximate number of passengers). Bus routes added by enumerators
  * are kept in the "Routes" tab and served to every phone as suggestions.
  *
  * HOW TO DEPLOY:
@@ -26,6 +26,11 @@
  * ROUTES TAB: you can also type routes there yourself (Route No, End A,
  * End B; Stations optional, e.g. "OD 3, OD 4"). Phones pick them up within
  * a few minutes. Delete a row to stop suggesting that route.
+ *
+ * ADMIN DASHBOARD (admin.html in the apps): live bus counts by station,
+ * direction, hour and route. Set the password once: Project Settings (gear)
+ * > Script properties > Add script property > ADMIN_PASSWORD = the password.
+ * It is not written in this file.
  *
  * SUMMARY: menu "A4 Bus Survey" > Build / refresh summary writes a "Summary"
  * tab: buses per station, route and direction by hour, and the passenger
@@ -52,8 +57,6 @@ const COLUMNS = [
   ["Route End A", "routeA", "text"],
   ["Route End B", "routeB", "text"],
   ["Direction", "direction", "text"],
-  ["From", "fromEnd", "text"],
-  ["To", "toEnd", "text"],
   ["Operator", "operator", "text"],
   ["Bus Size", "busSize", "text"],
   ["Passengers (approx.)", "occupancy", "text"],
@@ -87,7 +90,9 @@ function handleRequest(e) {
     for (const key in params) data[key] = params[key];
 
     const action = data.action;
-    if (action === "submit_a4bus_v1" || action === "submit_a4bus_v2") return handleSubmitBatch(data);
+    // v3 = current app (direction To / From Colombo). v1 / v2 records are still accepted.
+    if (/^submit_a4bus_v[1-3]$/.test(action || "")) return handleSubmitBatch(data);
+    if (action === "admin_stats") return handleAdmin(data);
     if (action === "routes") return responseJson({ status: "success", routes: readRoutes() });
     if (!action) return responseJson({ status: "success", message: "A4 bus survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
@@ -275,6 +280,75 @@ function checkGlobalRateLimit() {
   return true;
 }
 
+// ---------------------------------------------------------------------
+// Admin dashboard (admin.html). The password lives in Script properties
+// (ADMIN_PASSWORD), never in this file.
+// ---------------------------------------------------------------------
+const ADMIN_MAX_FAILS = 10; // wrong passwords allowed per 10 minutes
+
+function checkAdmin(password) {
+  const expected = PropertiesService.getScriptProperties().getProperty("ADMIN_PASSWORD");
+  if (!expected) return "The admin password is not set yet. In Apps Script: Project Settings > Script properties > add ADMIN_PASSWORD.";
+  const cache = CacheService.getScriptCache();
+  const fails = parseInt(cache.get("admin_fails") || "0", 10);
+  if (fails >= ADMIN_MAX_FAILS) return "Too many wrong passwords. Try again in 10 minutes.";
+  if (String(password || "") !== expected) {
+    cache.put("admin_fails", String(fails + 1), 600);
+    return "Wrong password.";
+  }
+  return "";
+}
+
+function handleAdmin(data) {
+  const problem = checkAdmin(data.password);
+  if (problem) return responseJson({ status: "error", auth: false, message: problem });
+  return responseJson(adminStats());
+}
+
+// Counts for the dashboard as [station, date, what, value, n] rows; the page
+// adds them up for the station and date picked.
+function adminStats() {
+  const sheet = getDataSheet();
+  const last = sheet.getLastRow();
+  const rows = last > 1 ? sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues() : [];
+  const col = {};
+  HEADERS.forEach(function (h, i) { col[h] = i; });
+  const agg = {};
+  const add = function (st, date, what, value) {
+    const k = [st, date, what, value].join("\u0001");
+    agg[k] = (agg[k] || 0) + 1;
+  };
+  const recorders = {};
+  rows.forEach(function (r) {
+    const st = String(r[col["Station"]] || "").trim() || "(no station)";
+    const date = String(r[col["Date"]] || "").trim() || "(no date)";
+    const time = String(r[col["Time"]] || "").trim();
+    const m = /^(\d{1,2})/.exec(time);
+    const hour = m ? ("0" + m[1]).slice(-2) : "??";
+    const dir = String(r[col["Direction"]] || "").trim() || "(no direction)";
+    const route = [r[col["Route No"]], r[col["Route End A"]] + " – " + r[col["Route End B"]]].filter(String).join(" · ");
+    add(st, date, "direction", dir);
+    add(st, date, "hour", hour + "|" + dir);
+    add(st, date, "route", route + "|" + dir);
+    add(st, date, "operator", String(r[col["Operator"]] || "").trim() || "(blank)");
+    add(st, date, "size", String(r[col["Bus Size"]] || "").trim() || "(blank)");
+    add(st, date, "occupancy", String(r[col["Passengers (approx.)"]] || "").trim() || "(blank)");
+    const name = String(r[col["Recorder"]] || "").trim() || "(no name)";
+    add(st, date, "recorder", name);
+    const stamp = date + " " + time;
+    if (!recorders[name] || stamp > recorders[name].last) recorders[name] = { station: st, last: stamp };
+  });
+  return {
+    status: "success",
+    survey: "bus",
+    generated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
+    total: rows.length,
+    stations: ["OD 1", "OD 2", "OD 3", "OD 4", "OD 5", "OD 6", "OD 7"],
+    counts: Object.keys(agg).map(function (k) { return k.split("\u0001").concat([agg[k]]); }),
+    recorders: Object.keys(recorders).map(function (n) { return { name: n, station: recorders[n].station, last: recorders[n].last }; })
+  };
+}
+
 // Run once from the editor: creates the tabs and asks for the permissions.
 function setup() {
   const sheet = getDataSheet();
@@ -294,7 +368,7 @@ function onOpen() {
 
 function buildSummary() {
   const ss = getSpreadsheet();
-  const data = getDataSheet().getDataRange().getValues();
+  const data = getDataSheet().getDataRange().getDisplayValues();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
   const OCC = ["Empty", "Less than 10", "10 – 20", "20 – 30", "30 – 40", "40 – 50", "50 – 60", "60 – 80", "More than 80"];
@@ -303,7 +377,8 @@ function buildSummary() {
   const groups = {}; // station|route|direction -> { hour -> n, total, occ -> n }
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
-    const hour = String(row[col["Time"]] || "").slice(0, 2) || "??";
+    const hm = /^(\d{1,2})/.exec(String(row[col["Time"]] || ""));
+    const hour = hm ? ("0" + hm[1]).slice(-2) : "??";
     hours[hour] = true;
     const route = [row[col["Route No"]], row[col["Route End A"]] + " – " + row[col["Route End B"]]].filter(String).join(" · ");
     const k = [row[col["Station"]], route, row[col["Direction"]] || "(no direction)"].join("|");

@@ -18,8 +18,9 @@ window.A4BUS_CONFIG = {
     ],
 
     // Every bus route in the study area: [route no, end A, end B, stations it passes].
-    // Each route can be recorded in both directions (A → B and B → A). Routes the
-    // enumerators add are shared to every phone through the Google Sheet.
+    // One number can run to several ends (99 Colombo – Badulla / Welimada / Passara ...):
+    // each end is its own row. Routes the enumerators add are shared to every phone
+    // through the Google Sheet.
     // Sources: SLTB Avissawella and Homagama depot route lists, Wikipedia (A4 road,
     // Padukka). Some lists are old and numbers change: enumerators can add routes in the app.
     routes: [
@@ -30,6 +31,16 @@ window.A4BUS_CONFIG = {
         ['122/3', 'Colombo', 'Kaluaggala', ['OD 6', 'OD 3']],
         ['122/4', 'Colombo', 'Homagama', []],
         ['99', 'Colombo', 'Badulla', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Bandarawela', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Haputale', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Welimada', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Passara', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Lunugala', ['OD 6', 'OD 3', 'OD 4']],
+        ['99', 'Colombo', 'Bibila', ['OD 6', 'OD 3', 'OD 4']],
+        ['122', 'Colombo', 'Embilipitiya', ['OD 6', 'OD 3', 'OD 4']],
+        ['122', 'Colombo', 'Rakwana', ['OD 6', 'OD 3', 'OD 4']],
+        ['122', 'Colombo', 'Suriyawewa', ['OD 6', 'OD 3', 'OD 4']],
+        ['122', 'Colombo', 'Kataragama', ['OD 6', 'OD 3', 'OD 4']],
         ['18/2', 'Colombo', 'Hatton', ['OD 6', 'OD 3', 'OD 4', 'OD 7']],
         ['23', 'Colombo', 'Maskeliya', ['OD 6', 'OD 3', 'OD 4', 'OD 7']],
         ['23/1', 'Avissawella', 'Maskeliya', ['OD 7']],
@@ -124,9 +135,11 @@ window.A4BUS_CONFIG = {
         ['697', 'Homagama', 'Kaduwela (via Korathota)', []],
         ['698', 'Homagama', 'Kaduwela (via Ranala)', []],
         ['74/122', 'Maharagama', 'Kandy', []],
+        ['182/122', 'Maharagama', 'Kandy', []],
         ['436/315/182/1', 'Aluthgama', 'Kandy', []],
         ['285/315/182/1', 'Matugama', 'Kandy', []],
         ['285/315/182/15', 'Matugama', 'Jaffna', []],
+        ['285/315/182/15', 'Matugama', 'Anuradhapura', []],
         ['17/57', 'Maharagama', 'Anuradhapura', []],
         ['450/315/182/48', 'Panadura', 'Polonnaruwa', []],
         ['122/182/48', 'Maharagama', 'Polonnaruwa', []],

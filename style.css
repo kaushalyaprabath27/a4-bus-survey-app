@@ -667,8 +667,7 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .route-picked .route-name i { color: var(--accent); margin-right: 6px; }
 .route-quick { margin-bottom: 10px; }
 .route-add { margin-top: 8px; }
-.dir-chips .dir-opt { font-size: 1.05rem; min-height: 60px; }
-.dir-chips .dir-opt b { color: var(--accent); }
+.dir-chips .chip-opt { font-size: 1.1rem; min-height: 64px; }
 .modal-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 8px; }
 .modal-label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; }
 .modal-label + .other-input { margin-top: 4px; }

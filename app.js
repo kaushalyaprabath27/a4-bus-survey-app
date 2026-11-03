@@ -5,8 +5,9 @@
    (OD 1 – OD 7, from the project KMZ) are set once per shift; every record
    saves its own date, time, Record No. and GPS position.
 
-   Per bus: route (quick picks, search or add a new one), direction
-   (A → B or B → A), operator, bus size and approximate number of passengers.
+   Per bus: direction of travel (to / from Colombo), route (quick picks, the
+   full list, search or add a new one), operator, bus size and approximate
+   number of passengers.
    Routes added on any phone are sent with its records, saved in the
    sheet's Routes tab and offered to every phone as suggestions.
 
@@ -19,8 +20,9 @@ const CONFIG = Object.assign({ appsScriptUrl: '', stations: [], routes: [], rout
 
 const PLACEHOLDER_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 const SURVEY_TYPE = 'a4-bus-survey';
+// v3: direction is To / From Colombo (no From / To route ends).
 // v2: no service type or station description; occupancy as passenger counts.
-const SYNC_ACTION = 'submit_a4bus_v2';
+const SYNC_ACTION = 'submit_a4bus_v3';
 const BATCH_SIZE = 50;
 const SYNC_INTERVAL_MS = 15000;
 
@@ -36,13 +38,14 @@ const USAGE_KEY = 'a4bus_usage';          // station -> route key -> times recor
 const THEME_KEY = 'a4bus_theme';
 
 // Answers for each bus. Edit option lists here.
+const DIRECTIONS = [['To Colombo', 'fa-arrow-left'], ['From Colombo', 'fa-arrow-right']];
 const OPERATORS = [['SLTB', 'fa-building-columns'], ['Private', 'fa-user-tie']];
 const SIZES = [['Large bus', 'fa-bus'], ['Minibus', 'fa-van-shuttle']];
 const OCCUPANCY = [
     ['Empty', 'fa-circle'], ['Less than 10', null], ['10 – 20', null], ['20 – 30', null], ['30 – 40', null],
     ['40 – 50', null], ['50 – 60', null], ['60 – 80', null], ['More than 80', 'fa-people-group']
 ];
-const REQUIRED = ['route', 'dir', 'operator', 'size', 'occupancy'];
+const REQUIRED = ['dir', 'route', 'operator', 'size', 'occupancy'];
 
 // ---------------------------------------------------------------------
 // Small helpers
@@ -80,7 +83,8 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) +
 // State
 // ---------------------------------------------------------------------
 let session = readJSON(SESSION_KEY, null);
-let cur = readJSON(DRAFT_KEY, {});    // { route: key, dir: 'AB' | 'BA', operator, size, occupancy }
+let cur = readJSON(DRAFT_KEY, {});    // { dir: 'To Colombo' | 'From Colombo', route: key, operator, size, occupancy }
+if (cur.dir && !DIRECTIONS.some(d => d[0] === cur.dir)) cur.dir = ''; // draft from the A → B version
 let isSyncing = false;
 let inFlightIds = new Set();
 let lastSyncError = null;
@@ -366,8 +370,10 @@ function choiceRow(q, id, options, cls) {
 
 function buildForm() {
     formEl.innerHTML = '';
-    // 1. Route
-    const q1 = qBlock('route', '1', 'Bus route', 'Read the route board');
+    // 1. Direction
+    choiceRow(qBlock('dir', '1', 'Direction of travel', 'Which way is the bus going?'), 'dir', DIRECTIONS, 'yesno dir-chips');
+    // 2. Route
+    const q1 = qBlock('route', '2', 'Bus route', 'Read the route board');
     q1.appendChild(el('div', 'route-picked hidden'));
     q1.appendChild(el('div', 'chips grid route-quick'));
     const allBox = el('details', 'route-all');
@@ -408,9 +414,7 @@ function buildForm() {
         if (e.key === 'Escape') list.classList.add('hidden');
     });
 
-    // 2. Direction
-    qBlock('dir', '2', 'Direction of travel', 'Which way is the bus going?').appendChild(el('div', 'chips grid dir-chips'));
-    // 3 – 6
+    // 3 – 5
     choiceRow(qBlock('operator', '3', 'Operator'), 'operator', OPERATORS, 'yesno');
     choiceRow(qBlock('size', '4', 'Bus size'), 'size', SIZES, 'yesno');
     choiceRow(qBlock('occupancy', '5', 'Number of passengers', 'Approximate count, including standing'), 'occupancy', OCCUPANCY, 'grid occ-grid');
@@ -420,9 +424,8 @@ function selectRoute(key) {
     const r = allRoutes().get(key);
     cur.route = key;
     cur.routeObj = r ? { no: r.no, a: r.a, b: r.b, source: r.source } : null;
-    cur.dir = '';
     changed();
-    setTimeout(() => sections.dir.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+    setTimeout(() => sections.operator.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
 }
 
 function renderRouteSection() {
@@ -434,7 +437,7 @@ function renderRouteSection() {
         picked.innerHTML = `<span class="route-name"><i class="fa-solid fa-bus"></i> ${escapeHtml(routeLabel(r))}</span>`;
         const x = el('button', 'icon-btn route-change', '<i class="fa-solid fa-xmark"></i><span class="hide-sm">Change</span>');
         x.type = 'button';
-        x.addEventListener('click', () => { cur.route = ''; cur.routeObj = null; cur.dir = ''; changed(); });
+        x.addEventListener('click', () => { cur.route = ''; cur.routeObj = null; changed(); });
         picked.appendChild(x);
     }
     const all = q.querySelector('.route-all');
@@ -468,24 +471,11 @@ function renderRouteSection() {
         });
         if (!routes.length) quick.appendChild(el('p', 'chips-empty', 'Search for the route below. Routes you record here will appear as quick picks.'));
     }
-    // Direction buttons follow the route.
-    const dir = sections.dir.querySelector('.dir-chips');
-    dir.innerHTML = '';
-    if (!r) dir.appendChild(el('p', 'chips-empty', 'Pick the route first.'));
-    else [['AB', r.a, r.b], ['BA', r.b, r.a]].forEach(([v, from, to]) => {
-        const b = el('button', 'chip-opt dir-opt' + (cur.dir === v ? ' selected' : ''), `<i class="fa-solid fa-arrow-right"></i><span>${escapeHtml(from)} <b>→</b> ${escapeHtml(to)}</span>`);
-        b.type = 'button';
-        b.dataset.value = v;
-        b.setAttribute('role', 'radio');
-        b.setAttribute('aria-checked', String(cur.dir === v));
-        b.addEventListener('click', () => { cur.dir = cur.dir === v ? '' : v; changed(); });
-        dir.appendChild(b);
-    });
 }
 
 function renderAll() {
     renderRouteSection();
-    ['operator', 'size', 'occupancy'].forEach(id => {
+    ['dir', 'operator', 'size', 'occupancy'].forEach(id => {
         sections[id].querySelectorAll('.chip-opt').forEach(b => {
             const on = cur[id] === b.dataset.value;
             b.classList.toggle('selected', on);
@@ -530,7 +520,6 @@ function releaseRecordNo(id) {
 function buildRecord(recordNo, ts) {
     const r = currentRoute() || {};
     const fix = fixIsFresh() ? lastFix : null;
-    const from = cur.dir === 'BA' ? r.b : r.a, to = cur.dir === 'BA' ? r.a : r.b;
     return {
         action: 'submit',
         surveyType: SURVEY_TYPE,
@@ -550,9 +539,7 @@ function buildRecord(recordNo, ts) {
         routeA: r.a || '',
         routeB: r.b || '',
         routeSource: r.source || '',
-        fromEnd: cur.dir ? from : '',
-        toEnd: cur.dir ? to : '',
-        direction: cur.dir ? `${from} → ${to}` : '',
+        direction: cur.dir || '',
         operator: cur.operator || '',
         busSize: cur.size || '',
         occupancy: cur.occupancy || ''
@@ -592,7 +579,7 @@ $('btn-save').addEventListener('click', async () => {
     resetForm();
     updateCount();
     updateSyncStatus();
-    showToast(`Bus ${record.recordNo.split('-').pop()} saved: ${record.routeNo || record.direction}`);
+    showToast(`Bus ${record.recordNo.split('-').pop()} saved: ${[record.routeNo, record.direction].filter(Boolean).join(' · ')}`);
     syncQueue();
 });
 

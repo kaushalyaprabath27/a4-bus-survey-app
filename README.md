@@ -9,11 +9,12 @@ One record per bus passing the O-D station.
 1. **Shift setup:** recorder name and the survey station, **OD 1 – OD 7** (from
    `OD_Survey_Locations_Map.kmz`). The phone's GPS marks the nearest station.
 2. **For each bus:**
-   1. **Route**: tap a quick pick (routes recorded most at this station and routes that
-      pass it), open **All bus routes in the area** (about 110, by route number), or search
-      by number or town (e.g. `122`, `Kosgama`). If it is not listed, **add it** (route
-      number, end A, end B).
-   2. **Direction**: A → B or B → A (e.g. *Colombo → Avissawella* / *Avissawella → Colombo*).
+   1. **Direction of travel**: To Colombo / From Colombo.
+   2. **Route**: tap a quick pick (routes recorded most at this station and routes that
+      pass it), open **All bus routes in the area** (about 125, by route number), or search
+      by number or town (e.g. `99`, `Kosgama`). One number can run to several ends, e.g.
+      99 Colombo – Badulla / Bandarawela / Haputale / Welimada / Passara / Lunugala / Bibila;
+      each is listed. If it is not listed, **add it** (route number, end A, end B).
    3. **Operator**: SLTB / Private.
    4. **Bus size**: Large bus / Minibus.
    5. **Number of passengers** (approx.): Empty, < 10, 10–20, 20–30, 30–40, 40–50, 50–60,
@@ -32,6 +33,14 @@ One record per bus passing the O-D station.
 - You can also type routes straight into the **Routes** tab (Route No, End A, End B,
   Stations such as `OD 3, OD 4`), or delete a row to stop suggesting it.
 - A route is the same whichever way round its ends are written.
+
+## Admin dashboard
+
+`admin.html` (linked from the first screen) shows both surveys live after logging in with
+the admin password: bus counts per hour and per route, To / From Colombo, operator, size,
+passenger bands, recorders, and the O-D survey's progress against its targets.
+The password is set in each Apps Script project under Project Settings → Script
+properties → `ADMIN_PASSWORD` (not in the code).
 
 ## Setting up
 

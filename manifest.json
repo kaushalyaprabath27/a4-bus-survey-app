@@ -1,0 +1,29 @@
+{
+  "name": "A4 Bus Survey",
+  "short_name": "A4 Bus Survey",
+  "description": "Offline-first roadside bus survey for the A4 Godagama-Avissawella widening feasibility study: one record per bus (route, direction, operator, type, occupancy).",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

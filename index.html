@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>A4 Bus Survey</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+    <button id="theme-toggle" class="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+        <i class="fa-solid fa-moon"></i>
+    </button>
+
+    <div id="app-container">
+
+        <!-- Screen 1: Welcome -->
+        <section id="screen-welcome" class="screen active">
+            <div class="card">
+                <div class="icon-container"><i class="fa-solid fa-bus"></i></div>
+                <h1 class="title">A4 Bus Survey</h1>
+                <p class="subtitle">One record per bus</p>
+                <button id="btn-next" class="btn-primary pulse-anim">Next <i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+        </section>
+
+        <!-- Screen 2: Shift setup -->
+        <section id="screen-setup" class="screen">
+            <div class="card">
+                <h2 class="title">Shift Setup</h2>
+                <div class="form-group">
+                    <label for="surveyor-name"><i class="fa-solid fa-user"></i> Recorder (enumerator)</label>
+                    <input type="text" id="surveyor-name" placeholder="Enter your name" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label><i class="fa-solid fa-location-dot"></i> Survey station</label>
+                    <div id="station-list" class="chips station-list" role="radiogroup" aria-label="Survey station"></div>
+                    <p id="station-gps" class="setup-note station-gps"><i class="fa-solid fa-location-crosshairs"></i> Finding your position to show the nearest station…</p>
+                </div>
+                <button id="btn-start" class="btn-primary w-full btn-disabled" disabled>Start Shift <i class="fa-solid fa-play"></i></button>
+                <button id="btn-export-setup" class="btn-link" type="button"><i class="fa-solid fa-download"></i> Export Local Backup</button>
+            </div>
+        </section>
+
+        <!-- Screen 3: Bus records -->
+        <section id="screen-survey" class="screen survey-screen">
+            <header class="topbar">
+                <div class="session-info">
+                    <span class="chip chip-strong"><i class="fa-solid fa-user"></i> <b id="info-name">-</b></span>
+                    <span class="chip" title="Survey station"><i class="fa-solid fa-location-dot"></i> <b id="info-station">-</b></span>
+                    <span id="gps-chip" class="chip gps-chip wait" title="Saved with each record"><i class="fa-solid fa-location-crosshairs"></i> <span class="gps-text">GPS searching…</span></span>
+                </div>
+                <div class="header-actions">
+                    <span id="sync-status" class="sync-status"><span class="dot"></span><span class="sync-text">Online</span></span>
+                    <span class="chip" title="Buses recorded in this shift"><i class="fa-solid fa-bus"></i> <b id="count-session">0</b></span>
+                    <button id="btn-undo" class="icon-btn" title="Delete the last saved bus"><i class="fa-solid fa-rotate-left"></i><span class="hide-sm">Undo</span></button>
+                    <button id="btn-export" class="icon-btn" title="Export local backup"><i class="fa-solid fa-download"></i></button>
+                    <button id="btn-end" class="icon-btn danger" title="End shift"><i class="fa-solid fa-flag-checkered"></i><span class="hide-sm">End</span></button>
+                </div>
+            </header>
+
+            <main class="form-scroll" id="form-scroll">
+                <div class="interview-form">
+                    <form id="bus-form" class="interview-form" novalidate autocomplete="off"></form>
+                </div>
+            </main>
+
+            <footer class="save-bar">
+                <span id="progress" class="progress">0 answered</span>
+                <button id="btn-clear" class="btn-secondary" type="button"><i class="fa-solid fa-eraser"></i> Clear</button>
+                <button id="btn-save" class="btn-primary" type="button"><i class="fa-solid fa-floppy-disk"></i> Save bus</button>
+            </footer>
+        </section>
+    </div>
+
+    <!-- Modal (confirm / summary / add route) -->
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-card">
+            <h3 id="modal-title"></h3>
+            <div id="modal-body"></div>
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn-secondary">Cancel</button>
+                <button id="modal-ok" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" aria-live="polite"></div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

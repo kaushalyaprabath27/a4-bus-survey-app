@@ -672,3 +672,14 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .modal-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 8px; }
 .modal-label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 10px; }
 .modal-label + .other-input { margin-top: 4px; }
+.route-all { margin: 4px 0 10px; border: 1px solid var(--glass-border); border-radius: 12px; }
+.route-all summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 0.9rem; }
+.route-all summary i { color: var(--accent); margin-right: 6px; }
+.route-all-n { color: var(--text-secondary); font-weight: 500; }
+.route-all-list { max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--glass-border); }
+.route-row { display: flex; gap: 10px; width: 100%; padding: 11px 12px; border: none; border-bottom: 1px solid var(--glass-border);
+    background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.route-row:hover, .route-row:focus { background: rgba(59, 130, 246, 0.12); }
+.route-row b { min-width: 7.5em; color: var(--accent); }
+.occ-grid { grid-template-columns: repeat(3, 1fr) !important; }
+.occ-grid .chip-opt { justify-content: center; }

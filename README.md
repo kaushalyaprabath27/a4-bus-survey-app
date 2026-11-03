@@ -10,14 +10,14 @@ One record per bus passing the O-D station.
    `OD_Survey_Locations_Map.kmz`). The phone's GPS marks the nearest station.
 2. **For each bus:**
    1. **Route**: tap a quick pick (routes recorded most at this station and routes that
-      pass it), or search by number or town (e.g. `122`, `Kosgama`). If it is not in the
-      list, **add it** (route number, end A, end B).
+      pass it), open **All bus routes in the area** (about 110, by route number), or search
+      by number or town (e.g. `122`, `Kosgama`). If it is not listed, **add it** (route
+      number, end A, end B).
    2. **Direction**: A → B or B → A (e.g. *Colombo → Avissawella* / *Avissawella → Colombo*).
    3. **Operator**: SLTB / Private.
-   4. **Service type**: Normal, Semi-luxury, Luxury (A/C), Intercity / Expressway.
-   5. **Bus size**: Large bus / Minibus.
-   6. **Occupancy level**: less than half the seats taken, about half, all seats taken,
-      all seats + some standing, crowded (full standing).
+   4. **Bus size**: Large bus / Minibus.
+   5. **Number of passengers** (approx.): Empty, < 10, 10–20, 20–30, 30–40, 40–50, 50–60,
+      60–80, > 80.
 3. **Save bus.** Date, time, Record No. (e.g. `KW-20261103-0042`) and GPS are added
    automatically. Records are stored on the phone first and sent to the Google Sheet in
    batches whenever there is internet. **Undo** deletes the last bus if not yet sent.
@@ -46,4 +46,4 @@ One record per bus passing the O-D station.
 - `a4-bus-survey`: one row per bus.
 - `Routes`: routes added by the enumerators (with stations and how often recorded).
 - Menu **A4 Bus Survey → Build / refresh summary**: buses per station, route and
-  direction by hour, plus the occupancy level mix.
+  direction by hour, plus the passenger count mix.

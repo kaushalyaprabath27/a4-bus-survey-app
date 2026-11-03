@@ -3,7 +3,7 @@
  * APPS SCRIPT BACKEND
  *
  * One row per bus recorded at an O-D station (route, direction, operator,
- * service type, bus size, occupancy level). Bus routes added by enumerators
+ * bus size, approximate number of passengers). Bus routes added by enumerators
  * are kept in the "Routes" tab and served to every phone as suggestions.
  *
  * HOW TO DEPLOY:
@@ -28,8 +28,8 @@
  * a few minutes. Delete a row to stop suggesting that route.
  *
  * SUMMARY: menu "A4 Bus Survey" > Build / refresh summary writes a "Summary"
- * tab: buses per station, route and direction by hour, and the occupancy
- * level mix for each route and direction.
+ * tab: buses per station, route and direction by hour, and the passenger
+ * count mix for each route and direction.
  */
 
 const DATA_SHEET_NAME = "a4-bus-survey";
@@ -41,7 +41,6 @@ const COLUMNS = [
   ["Record No", "recordNo", "text"],
   ["Recorder", "name", "text"],
   ["Station", "station", "text"],
-  ["Station Road", "stationRoad", "text"],
   ["Shift Start", "shiftStart", "text"],
   ["Date", "date", "text"],
   ["Time", "time", "text"],
@@ -56,9 +55,8 @@ const COLUMNS = [
   ["From", "fromEnd", "text"],
   ["To", "toEnd", "text"],
   ["Operator", "operator", "text"],
-  ["Service Type", "serviceType", "text"],
   ["Bus Size", "busSize", "text"],
-  ["Occupancy Level", "occupancy", "text"],
+  ["Passengers (approx.)", "occupancy", "text"],
   ["Route Source", "routeSource", "text"],
   ["EventID", "eventId", "text"]
 ];
@@ -89,7 +87,7 @@ function handleRequest(e) {
     for (const key in params) data[key] = params[key];
 
     const action = data.action;
-    if (action === "submit_a4bus_v1") return handleSubmitBatch(data);
+    if (action === "submit_a4bus_v1" || action === "submit_a4bus_v2") return handleSubmitBatch(data);
     if (action === "routes") return responseJson({ status: "success", routes: readRoutes() });
     if (!action) return responseJson({ status: "success", message: "A4 bus survey backend is running." });
     return responseJson({ status: "error", message: "Invalid action" });
@@ -299,7 +297,7 @@ function buildSummary() {
   const data = getDataSheet().getDataRange().getValues();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
-  const OCC = ["Less than half the seats taken", "About half the seats taken", "All seats taken", "All seats + some standing", "Crowded (full standing)"];
+  const OCC = ["Empty", "Less than 10", "10 – 20", "20 – 30", "30 – 40", "40 – 50", "50 – 60", "60 – 80", "More than 80"];
 
   const hours = {};
   const groups = {}; // station|route|direction -> { hour -> n, total, occ -> n }
@@ -312,7 +310,7 @@ function buildSummary() {
     const g = groups[k] = groups[k] || { total: 0, hours: {}, occ: {} };
     g.total++;
     g.hours[hour] = (g.hours[hour] || 0) + 1;
-    const o = String(row[col["Occupancy Level"]] || "(blank)");
+    const o = String(row[col["Passengers (approx.)"]] || "(blank)");
     g.occ[o] = (g.occ[o] || 0) + 1;
   }
   const hourList = Object.keys(hours).sort();
@@ -331,6 +329,6 @@ function buildSummary() {
   sheet.getRange(1, 1, 1, head.length).setFontWeight("bold");
   sheet.setFrozenRows(1);
   sheet.getRange(out.length + 2, 1).setValue("Buses recorded: " + (data.length - 1) +
-    ". Hour columns count buses by the hour they passed; the last columns show the occupancy level mix.");
+    ". Hour columns count buses by the hour they passed; the last columns show the passenger count mix.");
   sheet.autoResizeColumns(1, head.length);
 }

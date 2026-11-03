@@ -6,7 +6,7 @@
    saves its own date, time, Record No. and GPS position.
 
    Per bus: route (quick picks, search or add a new one), direction
-   (A → B or B → A), operator, service type, bus size and occupancy level.
+   (A → B or B → A), operator, bus size and approximate number of passengers.
    Routes added on any phone are sent with its records, saved in the
    sheet's Routes tab and offered to every phone as suggestions.
 
@@ -19,7 +19,8 @@ const CONFIG = Object.assign({ appsScriptUrl: '', stations: [], routes: [], rout
 
 const PLACEHOLDER_URL = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 const SURVEY_TYPE = 'a4-bus-survey';
-const SYNC_ACTION = 'submit_a4bus_v1';
+// v2: no service type or station description; occupancy as passenger counts.
+const SYNC_ACTION = 'submit_a4bus_v2';
 const BATCH_SIZE = 50;
 const SYNC_INTERVAL_MS = 15000;
 
@@ -36,16 +37,12 @@ const THEME_KEY = 'a4bus_theme';
 
 // Answers for each bus. Edit option lists here.
 const OPERATORS = [['SLTB', 'fa-building-columns'], ['Private', 'fa-user-tie']];
-const SERVICES = [['Normal', 'fa-bus'], ['Semi-luxury', 'fa-bus-simple'], ['Luxury (A/C)', 'fa-snowflake'], ['Intercity / Expressway', 'fa-road']];
 const SIZES = [['Large bus', 'fa-bus'], ['Minibus', 'fa-van-shuttle']];
 const OCCUPANCY = [
-    ['Less than half the seats taken', 'fa-battery-quarter'],
-    ['About half the seats taken', 'fa-battery-half'],
-    ['All seats taken', 'fa-battery-three-quarters'],
-    ['All seats + some standing', 'fa-battery-full'],
-    ['Crowded (full standing)', 'fa-people-group']
+    ['Empty', 'fa-circle'], ['Less than 10', null], ['10 – 20', null], ['20 – 30', null], ['30 – 40', null],
+    ['40 – 50', null], ['50 – 60', null], ['60 – 80', null], ['More than 80', 'fa-people-group']
 ];
-const REQUIRED = ['route', 'dir', 'operator', 'service', 'size', 'occupancy'];
+const REQUIRED = ['route', 'dir', 'operator', 'size', 'occupancy'];
 
 // ---------------------------------------------------------------------
 // Small helpers
@@ -83,7 +80,7 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) +
 // State
 // ---------------------------------------------------------------------
 let session = readJSON(SESSION_KEY, null);
-let cur = readJSON(DRAFT_KEY, {});    // { route: key, dir: 'AB' | 'BA', operator, service, size, occupancy }
+let cur = readJSON(DRAFT_KEY, {});    // { route: key, dir: 'AB' | 'BA', operator, size, occupancy }
 let isSyncing = false;
 let inFlightIds = new Set();
 let lastSyncError = null;
@@ -279,6 +276,16 @@ function searchRoutes(text) {
         .sort((x, y) => ((norm(y.no) === words[0]) - (norm(x.no) === words[0])) || (use[y.key] || 0) - (use[x.key] || 0) || routeLabel(x).localeCompare(routeLabel(y)))
         .slice(0, 30);
 }
+// Route numbers in natural order: 3, 3/6, 18/2, 23, 99, 122, 122/1 ... (unnumbered last).
+function byRouteNo(x, y) {
+    const parts = r => (r.no || '~').split(/[^0-9]+/).filter(Boolean).map(Number);
+    const a = parts(x), b = parts(y);
+    if (!x.no !== !y.no) return x.no ? -1 : 1;
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) - (b[i] || 0);
+    }
+    return routeLabel(x).localeCompare(routeLabel(y));
+}
 function currentRoute() { return cur.route ? allRoutes().get(cur.route) || cur.routeObj || null : null; }
 
 // Shared routes from the sheet (GET ?action=routes).
@@ -363,6 +370,9 @@ function buildForm() {
     const q1 = qBlock('route', '1', 'Bus route', 'Read the route board');
     q1.appendChild(el('div', 'route-picked hidden'));
     q1.appendChild(el('div', 'chips grid route-quick'));
+    const allBox = el('details', 'route-all');
+    allBox.innerHTML = '<summary><i class="fa-solid fa-list"></i> All bus routes in the area <span class="route-all-n"></span></summary><div class="route-all-list"></div>';
+    q1.appendChild(allBox);
     const wrap = el('div', 'place');
     wrap.innerHTML = '<i class="fa-solid fa-magnifying-glass place-icon"></i><input type="text" class="bus-search" placeholder="Search number or town, e.g. 122 or Kosgama" aria-label="Search bus routes"><ul class="suggest hidden" role="listbox"></ul>';
     q1.appendChild(wrap);
@@ -402,9 +412,8 @@ function buildForm() {
     qBlock('dir', '2', 'Direction of travel', 'Which way is the bus going?').appendChild(el('div', 'chips grid dir-chips'));
     // 3 – 6
     choiceRow(qBlock('operator', '3', 'Operator'), 'operator', OPERATORS, 'yesno');
-    choiceRow(qBlock('service', '4', 'Service type'), 'service', SERVICES);
-    choiceRow(qBlock('size', '5', 'Bus size'), 'size', SIZES, 'yesno');
-    choiceRow(qBlock('occupancy', '6', 'Occupancy level', 'Observe the passengers inside'), 'occupancy', OCCUPANCY);
+    choiceRow(qBlock('size', '4', 'Bus size'), 'size', SIZES, 'yesno');
+    choiceRow(qBlock('occupancy', '5', 'Number of passengers', 'Approximate count, including standing'), 'occupancy', OCCUPANCY, 'grid occ-grid');
 }
 
 function selectRoute(key) {
@@ -427,6 +436,21 @@ function renderRouteSection() {
         x.type = 'button';
         x.addEventListener('click', () => { cur.route = ''; cur.routeObj = null; cur.dir = ''; changed(); });
         picked.appendChild(x);
+    }
+    const all = q.querySelector('.route-all');
+    all.classList.toggle('hidden', !!r);
+    if (!r) {
+        const routes = [...allRoutes().values()].sort(byRouteNo);
+        all.querySelector('.route-all-n').textContent = `(${routes.length})`;
+        const listEl = all.querySelector('.route-all-list');
+        listEl.innerHTML = '';
+        routes.forEach(rt => {
+            const b = el('button', 'route-row', `<b>${escapeHtml(rt.no || '–')}</b><span>${escapeHtml(rt.a)} – ${escapeHtml(rt.b)}</span>`);
+            b.type = 'button';
+            b.dataset.value = rt.key;
+            b.addEventListener('click', () => { all.open = false; selectRoute(rt.key); });
+            listEl.appendChild(b);
+        });
     }
     const quick = q.querySelector('.route-quick');
     quick.innerHTML = '';
@@ -461,7 +485,7 @@ function renderRouteSection() {
 
 function renderAll() {
     renderRouteSection();
-    ['operator', 'service', 'size', 'occupancy'].forEach(id => {
+    ['operator', 'size', 'occupancy'].forEach(id => {
         sections[id].querySelectorAll('.chip-opt').forEach(b => {
             const on = cur[id] === b.dataset.value;
             b.classList.toggle('selected', on);
@@ -505,7 +529,6 @@ function releaseRecordNo(id) {
 // ---------------------------------------------------------------------
 function buildRecord(recordNo, ts) {
     const r = currentRoute() || {};
-    const st = stationById(session.station) || {};
     const fix = fixIsFresh() ? lastFix : null;
     const from = cur.dir === 'BA' ? r.b : r.a, to = cur.dir === 'BA' ? r.a : r.b;
     return {
@@ -516,7 +539,6 @@ function buildRecord(recordNo, ts) {
         recordNo,
         name: session.name,
         station: session.station,
-        stationRoad: st.road || '',
         shiftStart: `${formatDate(session.startedAt)} ${formatTime(session.startedAt).slice(0, 5)}`,
         date: formatDate(ts),
         time: formatTime(ts),
@@ -532,7 +554,6 @@ function buildRecord(recordNo, ts) {
         toEnd: cur.dir ? to : '',
         direction: cur.dir ? `${from} → ${to}` : '',
         operator: cur.operator || '',
-        serviceType: cur.service || '',
         busSize: cur.size || '',
         occupancy: cur.occupancy || ''
     };
@@ -549,7 +570,7 @@ $('btn-save').addEventListener('click', async () => {
     const n = refreshProgress();
     if (!currentRoute()) { showToast('Pick the bus route first', 'error'); return; }
     if (n < REQUIRED.length) {
-        const names = { route: 'Bus route', dir: 'Direction of travel', operator: 'Operator', service: 'Service type', size: 'Bus size', occupancy: 'Occupancy level' };
+        const names = { route: 'Bus route', dir: 'Direction of travel', operator: 'Operator', size: 'Bus size', occupancy: 'Number of passengers' };
         const missing = REQUIRED.filter(id => !cur[id]).map(id => `<li>${names[id]}</li>`).join('');
         const ok = await openModal({ title: `Save with ${REQUIRED.length - n} blank?`, html: `These are blank:<ul style="margin:0.5rem 0 0 1.2rem">${missing}</ul>`, okLabel: 'Save anyway', cancelLabel: 'Go back' });
         if (!ok) return;

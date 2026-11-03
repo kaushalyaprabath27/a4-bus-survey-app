@@ -1,6 +1,6 @@
 // Offline shell for the A4 Bus Survey PWA.
 // Bump CACHE_NAME whenever app files change so devices pick up the update.
-const CACHE_NAME = 'a4-bus-survey-v2';
+const CACHE_NAME = 'a4-bus-survey-v3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',

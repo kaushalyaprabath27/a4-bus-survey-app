@@ -201,8 +201,8 @@ function renderStations() {
     CONFIG.stations.forEach(s => {
         const d = here ? haversineM(here, s) : null;
         const b = el('button', 'chip-opt station-opt' + (s.id === pickedStation ? ' selected' : ''),
-            `<i class="fa-solid fa-location-dot"></i><span><b>${escapeHtml(s.id)}</b> · ${escapeHtml(s.road)}<small>${escapeHtml(s.place)}` +
-            (d !== null ? ` · ${fmtDist(d)} away${nearest && nearest.id === s.id ? ' · <em>nearest</em>' : ''}` : '') + '</small></span>');
+            `<i class="fa-solid fa-location-dot"></i><span><b>${escapeHtml(s.id)}</b>` +
+            (d !== null ? `<small>${fmtDist(d)} away${nearest && nearest.id === s.id ? ' · <em>nearest</em>' : ''}</small>` : '') + '</span>');
         b.type = 'button';
         b.dataset.value = s.id;
         b.setAttribute('role', 'radio');

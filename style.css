@@ -656,8 +656,8 @@ body.route-full-open .theme-btn, body.route-full-open .topbar, body.route-full-o
 .amount .amount-nk { flex: 0 0 auto; }
 
 /* ---------- A4 bus survey additions ---------- */
-.station-list { flex-direction: column; }
-.station-list .station-opt { width: 100%; justify-content: flex-start; text-align: left; }
+.station-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.station-list .station-opt { justify-content: flex-start; text-align: left; }
 .station-opt span { display: flex; flex-direction: column; gap: 2px; }
 .station-opt small { font-size: 0.75rem; color: var(--text-secondary); font-weight: 500; }
 .station-opt small em { color: var(--ok); font-style: normal; font-weight: 700; }

@@ -75,6 +75,7 @@ button, select, input { font: inherit; color: inherit; }
 .kpi .k-label { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .kpi .k-value { font-size: 26px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .kpi .k-sub { color: var(--muted); font-size: 12px; }
+.kpi .k-of { font-size: 15px; color: var(--muted); font-weight: 600; }
 
 /* Tables */
 .table-wrap { overflow-x: auto; }

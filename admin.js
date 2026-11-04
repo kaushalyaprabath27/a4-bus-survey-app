@@ -201,18 +201,44 @@ function odView(d) {
     const hourList = [...new Set([...hours.keys()].map(k => k.split('|')[0]))].sort();
     const totalDone = [...done.values()].reduce((s, n) => s + n, 0);
     const totalTarget = Object.values(t.group).reduce((s, n) => s + n, 0);
-    const counted = d.classes.reduce((s, c) => s + Math.min(done.get(c.name) || 0, t.byClass[c.name] || 0), 0);
     const station = state.station === 'all' ? 'all stations' : state.station;
     const singleStation = state.station !== 'all';
     const tg = singleStation ? (d.targets[state.station] || { hours: 12, byClass: {} }) : null;
 
+    // Half of each target towards Colombo, half towards Avissawella.
+    const DIRS = d.directions || ['Towards Colombo', 'Towards Avissawella'];
+    const hasDir = d.version >= 2;
+    const byDir = tally(d, 'classDir'); // "class|direction" -> n
+    const dirDone = (cls, i) => byDir.get(`${cls}|${DIRS[i]}`) || 0;
+    const half = (target, i) => i === 0 ? Math.ceil(target / 2) : Math.floor(target / 2);
+    // Still needed: each direction up to its half (more in one direction does not make up for the other).
+    const remainingOf = (cls, target) => !target ? 0 : hasDir
+        ? DIRS.reduce((s, dir, i) => s + Math.max(0, half(target, i) - dirDone(cls, i)), 0)
+        : Math.max(0, target - (done.get(cls) || 0));
+    const sum = (list, f) => list.reduce((s, x) => s + f(x), 0);
+    const targeted = d.classes.filter(c => (t.byClass[c.name] || 0) > 0);
+    const totalRemaining = sum(targeted, c => remainingOf(c.name, t.byClass[c.name]));
+    const dirTotals = DIRS.map((dir, i) => ({
+        dir,
+        done: sum([...byDir.entries()].filter(([k]) => k.endsWith('|' + dir)), e => e[1]),
+        need: sum(targeted, c => half(t.byClass[c.name], i)),
+        counted: sum(targeted, c => Math.min(dirDone(c.name, i), half(t.byClass[c.name], i)))
+    }));
+
     let html = `<div class="kpis">` +
         kpi('Interviews', fmt(totalDone), `${esc(station)}${state.date !== 'all' ? ' · ' + esc(state.date) : ''}`) +
-        kpi('Target', totalTarget ? fmt(totalTarget) : '–', totalTarget ? '' : 'set targets for this station') +
-        kpi('Target reached', totalTarget ? pct(counted, totalTarget) + '%' : '–', 'counting each class up to its target') +
-        kpi('Still needed', totalTarget ? fmt(Math.max(0, totalTarget - counted)) : '–', '') + `</div>`;
+        kpi('Target', totalTarget ? fmt(totalTarget) : '–', totalTarget ? 'half each direction' : 'set targets for this station') +
+        (hasDir ? dirTotals.map(x => kpi(x.dir, `${fmt(x.done)}<span class="k-of"> / ${x.need ? fmt(x.need) : '–'}</span>`, x.need ? `${pct(x.counted, x.need)}% of its half · ${fmt(Math.max(0, x.need - x.counted))} still needed` : '')).join('') : '') +
+        kpi('Target reached', totalTarget ? pct(totalTarget - totalRemaining, totalTarget) + '%' : '–', 'each class and direction up to its target') +
+        kpi('Still needed', totalTarget ? fmt(totalRemaining) : '–', '') + `</div>`;
 
-    // Progress table
+    // Progress table: total, then each direction as surveyed / needed
+    const dirCell = (n, need) => need
+        ? `<td class="num ${n >= need ? 'met' : ''}">${n >= need ? '✓ ' : ''}${fmt(n)} <span class="muted small">/ ${fmt(need)}</span></td>`
+        : `<td class="num">${fmt(n)}</td>`;
+    const dirCells = (list, target) => hasDir
+        ? DIRS.map((dir, i) => dirCell(sum(list, c => dirDone(c.name, i)), sum(list, c => half(target(c), i)))).join('')
+        : '';
     const groups = ['Passenger', 'Freight'];
     let rows = '';
     groups.forEach(g => {
@@ -220,24 +246,32 @@ function odView(d) {
         cls.forEach(c => {
             const n = done.get(c.name) || 0, target = t.byClass[c.name] || 0;
             const tcell = editing ? `<input type="number" min="0" step="1" data-class="${esc(c.name)}" value="${tg && tg.byClass[c.name] !== undefined ? tg.byClass[c.name] : ''}" aria-label="Target ${esc(c.name)}">` : (target ? fmt(target) : '–');
-            rows += `<tr><td>${esc(c.name)}</td><td class="num">${tcell}</td><td class="num">${fmt(n)}</td><td class="num">${target ? fmt(Math.max(0, target - n)) : '–'}</td><td>${progress(n, target)}</td></tr>`;
+            const rem = remainingOf(c.name, target);
+            rows += `<tr><td>${esc(c.name)}</td><td class="num">${tcell}</td><td class="num">${fmt(n)}</td>${dirCells([c], x => t.byClass[x.name] || 0)}<td class="num">${target ? fmt(rem) : '–'}</td><td>${progress(target - rem, target)}</td></tr>`;
         });
-        const gDone = cls.reduce((s, c) => s + (done.get(c.name) || 0), 0);
+        const gDone = sum(cls, c => done.get(c.name) || 0);
         const gT = t.group[g] || 0;
+        const gRem = sum(cls, c => remainingOf(c.name, t.byClass[c.name] || 0));
         const ph = t.perHour[g] || 0;
-        rows += `<tr class="group"><td>${g} total${ph ? ` <span class="muted small">· ${fmt(ph)} per hour</span>` : ''}</td><td class="num">${gT ? fmt(gT) : '–'}</td><td class="num">${fmt(gDone)}</td><td class="num">${gT ? fmt(Math.max(0, gT - gDone)) : '–'}</td><td>${progress(gDone, gT)}</td></tr>`;
+        rows += `<tr class="group"><td>${g} total${ph ? ` <span class="muted small">· ${fmt(ph)} per hour</span>` : ''}</td><td class="num">${gT ? fmt(gT) : '–'}</td><td class="num">${fmt(gDone)}</td>${dirCells(cls, x => t.byClass[x.name] || 0)}<td class="num">${gT ? fmt(gRem) : '–'}</td><td>${progress(gT - gRem, gT)}</td></tr>`;
     });
     const others = sortedDesc(done).filter(([k]) => !d.classes.some(c => c.name === k));
-    others.forEach(([k, n]) => { rows += `<tr><td>${esc(k)}</td><td class="num">–</td><td class="num">${fmt(n)}</td><td class="num">–</td><td></td></tr>`; });
-    rows += `<tr class="grand"><td>All vehicles</td><td class="num">${totalTarget ? fmt(totalTarget) : '–'}</td><td class="num">${fmt(totalDone)}</td><td class="num">${totalTarget ? fmt(Math.max(0, totalTarget - counted)) : '–'}</td><td>${progress(counted, totalTarget)}</td></tr>`;
+    others.forEach(([k, n]) => {
+        const o = [{ name: k }];
+        rows += `<tr><td>${esc(k)}</td><td class="num">–</td><td class="num">${fmt(n)}</td>${dirCells(o, () => 0)}<td class="num">–</td><td></td></tr>`;
+    });
+    const all = d.classes.concat(others.map(([k]) => ({ name: k })));
+    rows += `<tr class="grand"><td>All vehicles</td><td class="num">${totalTarget ? fmt(totalTarget) : '–'}</td><td class="num">${fmt(totalDone)}</td>${dirCells(all, x => t.byClass[x.name] || 0)}<td class="num">${totalTarget ? fmt(totalRemaining) : '–'}</td><td>${progress(totalTarget - totalRemaining, totalTarget)}</td></tr>`;
     const editBtn = singleStation
         ? (editing
             ? `<label class="small">Survey hours <input type="number" min="1" max="24" step="0.5" id="t-hours" value="${tg.hours}"></label><button class="btn" id="t-save"><i class="fa-solid fa-floppy-disk"></i> Save targets</button><button class="btn-ghost" id="t-cancel">Cancel</button>`
             : `<button class="btn-ghost" id="t-edit"><i class="fa-solid fa-pen"></i> Edit targets</button>`)
         : '<span class="muted small">Pick one station to edit its targets</span>';
     const mapping = d.classes.map(c => `<li><b>${esc(c.name)}</b>: ${c.types.map(esc).join(', ')}</li>`).join('');
+    const dirHead = hasDir ? DIRS.map(x => `<th class="num">${esc(x)}<br><span class="small">surveyed / needed</span></th>`).join('') : '';
     html += `<section class="card wide"><h2><i class="fa-solid fa-bullseye"></i> Progress: ${esc(station)}<span class="spacer"></span>${editBtn}</h2>
-        <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Total to be surveyed</th><th class="num">Surveyed</th><th class="num">Remaining</th><th>Progress</th></tr>${rows}</table></div>
+        <div class="table-wrap"><table><tr><th>Type of vehicle</th><th class="num">Total to be surveyed</th><th class="num">Surveyed</th>${dirHead}<th class="num">Still needed</th><th>Progress</th></tr>${rows}</table></div>
+        <p class="muted small card-note">${hasDir ? 'Half of each target is needed towards Colombo and half towards Avissawella; extra interviews in one direction do not count for the other.' : 'Update the Apps Script to see the counts by direction.'}</p>
         <details class="map card-note"><summary class="small">Which app vehicle types count in each class</summary><ul class="small">${mapping}</ul></details></section>`;
 
     // Per hour
@@ -253,7 +287,7 @@ function odView(d) {
     html += `<section class="card"><h2><i class="fa-solid fa-clock"></i> Interviews per hour</h2>
         <div class="table-wrap"><table><tr><th>Hour</th><th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th></tr>${hourRows || '<tr><td colspan="4" class="empty">Nothing recorded yet.</td></tr>'}</table></div>
         <p class="muted small card-note">${state.date === 'all' ? 'Pick a date to compare each hour with the per-hour target.' : 'Shown as surveyed / needed per hour.'}</p></section>`;
-    html += recordersCard(d, 'Interviews');
+    html += hasDir ? odEnumerators(d, DIRS) : recordersCard(d, 'Interviews');
 
     // Answers
     html += bars('Direction', tally(d, 'direction'));
@@ -267,6 +301,38 @@ function odView(d) {
     html += bars('Load condition (freight)', tally(d, 'load'));
     html += bars('Monthly household income (owners)', tally(d, 'income'));
     return html;
+}
+
+// Counts of each enumerator: by direction, passenger / freight, and by vehicle class.
+function odEnumerators(d, DIRS) {
+    const total = tally(d, 'recorder');
+    const byDir = tally(d, 'recDir');     // "name|direction" -> n
+    const byClass = tally(d, 'recClass'); // "name|class" -> n
+    const latest = new Map((d.recorders || []).map(r => [r.name, r]));
+    const groupOf = name => (d.classes.find(c => c.name === name) || {}).group || 'Other';
+    const names = sortedDesc(total).map(e => e[0]);
+    const per = name => {
+        const cls = new Map();
+        byClass.forEach((n, k) => { if (k.startsWith(name + '|')) cls.set(k.slice(name.length + 1), n); });
+        return cls;
+    };
+    const rows = names.map(name => {
+        const cls = per(name), r = latest.get(name) || {};
+        const g = grp => [...cls.entries()].filter(([c]) => groupOf(c) === grp).reduce((s, e) => s + e[1], 0);
+        return `<tr><td>${esc(name)}</td><td>${esc(r.station || '')}</td>${DIRS.map(dir => `<td class="num">${fmt(byDir.get(`${name}|${dir}`) || 0)}</td>`).join('')}<td class="num">${fmt(g('Passenger'))}</td><td class="num">${fmt(g('Freight'))}</td><td class="num"><b>${fmt(total.get(name))}</b></td><td>${esc(r.last || '')}</td></tr>`;
+    }).join('');
+    // Enumerator x vehicle class (only classes with interviews)
+    const usedClasses = d.classes.map(c => c.name).concat([...new Set([...byClass.keys()].map(k => k.slice(k.indexOf('|') + 1)))].filter(c => !d.classes.some(x => x.name === c)))
+        .filter(c => [...byClass.keys()].some(k => k.endsWith('|' + c)));
+    const matrix = names.map(name => {
+        const cls = per(name);
+        return `<tr><td>${esc(name)}</td>${usedClasses.map(c => `<td class="num">${cls.get(c) ? fmt(cls.get(c)) : '<span class="muted">0</span>'}</td>`).join('')}<td class="num"><b>${fmt(total.get(name))}</b></td></tr>`;
+    }).join('');
+    const empty = '<tr><td colspan="9" class="empty">Nothing recorded yet.</td></tr>';
+    return `<section class="card wide"><h2><i class="fa-solid fa-users"></i> Enumerators (${names.length})</h2>
+        <div class="table-wrap"><table><tr><th>Enumerator</th><th>Station (last)</th>${DIRS.map(x => `<th class="num">${esc(x)}</th>`).join('')}<th class="num">Passenger</th><th class="num">Freight</th><th class="num">Total</th><th>Last record</th></tr>${rows || empty}</table></div>
+        <details class="map card-note"${names.length ? '' : ' hidden'}><summary class="small">Each enumerator by vehicle class</summary>
+        <div class="table-wrap"><table><tr><th>Enumerator</th>${usedClasses.map(c => `<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total</th></tr>${matrix}</table></div></details></section>`;
 }
 
 function wireTargets(d) {

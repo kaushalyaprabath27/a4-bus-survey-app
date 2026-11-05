@@ -32,6 +32,9 @@
  * > Script properties > Add script property > ADMIN_PASSWORD = the password.
  * It is not written in this file.
  *
+ * OD 4 (Aluthambalama): its buses go to their own tab, "OD 4 Aluthambalama"
+ * (same columns). The dashboard and Summary include every tab.
+ *
  * SUMMARY: menu "A4 Bus Survey" > Build / refresh summary writes a "Summary"
  * tab: buses per station, route and direction by hour, and the passenger
  * count mix for each route and direction.
@@ -115,9 +118,11 @@ function handleSubmitBatch(data) {
     return responseJson({ status: "error", message: "Server busy. The app will retry automatically." });
   }
   try {
-    const sheet = getDataSheet();
-    const existing = getExistingEventIds(sheet);
-    const rows = [];
+    // An eventId already in any data tab is skipped (re-sent batches are not written twice).
+    const existing = {};
+    dataTabNames().forEach(function (name) { Object.assign(existing, getExistingEventIds(getDataSheet(name))); });
+    const rowsByTab = {};
+    let count = 0;
     const added = [];
     let duplicatesSkipped = 0;
     for (let i = 0; i < payload.length; i++) {
@@ -126,16 +131,19 @@ function handleSubmitBatch(data) {
       const id = item.eventId ? String(item.eventId) : "";
       if (id && existing[id]) { duplicatesSkipped++; continue; }
       if (id) existing[id] = true;
-      rows.push(toRow(item));
+      const tab = tabForStation(item.station);
+      (rowsByTab[tab] = rowsByTab[tab] || []).push(toRow(item));
+      count++;
       if (item.routeSource === "added" && item.routeA && item.routeB) added.push(item);
     }
     repairIfDue();
-    if (rows.length) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
-    }
+    Object.keys(rowsByTab).forEach(function (tab) {
+      const sheet = getDataSheet(tab);
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsByTab[tab].length, HEADERS.length).setValues(rowsByTab[tab]);
+    });
     if (added.length) addRoutes(added);
     SpreadsheetApp.flush();
-    return responseJson({ status: "success", count: rows.length, duplicatesSkipped: duplicatesSkipped });
+    return responseJson({ status: "success", count: count, duplicatesSkipped: duplicatesSkipped });
   } finally {
     lock.releaseLock();
   }
@@ -261,7 +269,8 @@ function repairIfDue() {
 // (in the data tab and the Routes tab).
 function repairData() {
   const fix = function (v, shown) { return v instanceof Date ? "'" + undoDate(shown) : null; };
-  let n = repairColumn(getDataSheet(), "Route No", fix);
+  let n = 0;
+  dataTabNames().forEach(function (name) { n += repairColumn(getDataSheet(name), "Route No", fix); });
   const routes = getRoutesSheet();
   const last = routes.getLastRow();
   if (last > 1) {
@@ -291,22 +300,40 @@ function getSpreadsheet() {
   return ss;
 }
 
-function getDataSheet() {
+function getDataSheet(name) {
+  name = name || DATA_SHEET_NAME;
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(DATA_SHEET_NAME);
+  let sheet = ss.getSheetByName(name);
   if (sheet && !hasCurrentHeaders(sheet)) {
     if (sheet.getLastRow() <= 1) sheet.clear();
     else {
-      sheet.setName(DATA_SHEET_NAME + " (old " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HHmm") + ")");
+      sheet.setName(name + " (old " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HHmm") + ")");
       sheet = null;
     }
   }
-  if (!sheet) sheet = ss.insertSheet(DATA_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(name);
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight("bold");
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+// Stations whose records go to their own tab (same columns as the main tab).
+const STATION_TABS = { "OD 4": "OD 4 Aluthambalama" };
+function tabForStation(station) { return STATION_TABS[String(station || "").trim()] || DATA_SHEET_NAME; }
+function dataTabNames() {
+  return [DATA_SHEET_NAME].concat(Object.keys(STATION_TABS).map(function (k) { return STATION_TABS[k]; }));
+}
+// Every record (shown values), from the main tab and the station tabs.
+function readAllRows() {
+  let rows = [];
+  dataTabNames().forEach(function (name) {
+    const sheet = getDataSheet(name);
+    const last = sheet.getLastRow();
+    if (last > 1) rows = rows.concat(sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues());
+  });
+  return rows;
 }
 
 function hasCurrentHeaders(sheet) {
@@ -366,9 +393,7 @@ function handleAdmin(data) {
 // Counts for the dashboard as [station, date, what, value, n] rows; the page
 // adds them up for the station and date picked.
 function adminStats() {
-  const sheet = getDataSheet();
-  const last = sheet.getLastRow();
-  const rows = last > 1 ? sheet.getRange(2, 1, last - 1, HEADERS.length).getDisplayValues() : [];
+  const rows = readAllRows();
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
   const agg = {};
@@ -410,6 +435,7 @@ function adminStats() {
 // Run once from the editor: creates the tabs and asks for the permissions.
 function setup() {
   const sheet = getDataSheet();
+  dataTabNames().forEach(function (name) { getDataSheet(name); });
   getRoutesSheet();
   repairData();
   Logger.log("Sheet ready: " + sheet.getParent().getUrl());
@@ -428,7 +454,7 @@ function onOpen() {
 
 function buildSummary() {
   const ss = getSpreadsheet();
-  const data = getDataSheet().getDataRange().getDisplayValues();
+  const data = [HEADERS].concat(readAllRows());
   const col = {};
   HEADERS.forEach(function (h, i) { col[h] = i; });
   const OCC = ["Empty", "Less than 10", "10 – 20", "20 – 30", "30 – 40", "40 – 50", "50 – 60", "60 – 80", "More than 80"];

@@ -129,6 +129,7 @@ function handleSubmitBatch(data) {
       rows.push(toRow(item));
       if (item.routeSource === "added" && item.routeA && item.routeB) added.push(item);
     }
+    repairIfDue();
     if (rows.length) {
       sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
     }
@@ -171,8 +172,9 @@ function addRoutes(items) {
   const sheet = getRoutesSheet();
   const last = sheet.getLastRow();
   const values = last > 1 ? sheet.getRange(2, 1, last - 1, ROUTE_HEADERS.length).getValues() : [];
+  const shownNo = last > 1 ? sheet.getRange(2, 1, last - 1, 1).getDisplayValues() : [];
   const index = {};
-  values.forEach(function (r, i) { index[routeKey(r[0], r[1], r[2])] = i; });
+  values.forEach(function (r, i) { index[routeKey(undoDate(shownNo[i][0]), r[1], r[2])] = i; });
   const newRows = [];
   items.forEach(function (it) {
     const k = routeKey(it.routeNo, it.routeA, it.routeB);
@@ -197,11 +199,11 @@ function readRoutes() {
   const sheet = getRoutesSheet();
   const last = sheet.getLastRow();
   if (last < 2) return [];
-  return sheet.getRange(2, 1, last - 1, ROUTE_HEADERS.length).getValues()
+  return sheet.getRange(2, 1, last - 1, ROUTE_HEADERS.length).getDisplayValues()
     .filter(function (r) { return String(r[1]).trim() && String(r[2]).trim(); })
     .map(function (r) {
       return {
-        no: String(r[0]).trim(), a: String(r[1]).trim(), b: String(r[2]).trim(),
+        no: undoDate(r[0]), a: String(r[1]).trim(), b: String(r[2]).trim(),
         stations: String(r[3] || "").split(/\s*,\s*/).filter(String)
       };
     });
@@ -214,7 +216,63 @@ function text(v, maxLen) {
   if (v === undefined || v === null) return "";
   let s = String(v).trim().slice(0, maxLen || 300);
   if (/^[=+\-@]/.test(s)) s = "'" + s; // never run typed text as a formula
+  // Keep "3/1", "1/2" or "2026-11-04" as typed (Sheets would make them dates).
+  else if (/^\d+(\s*[\/.\-]\s*\d+)+$/.test(s)) s = "'" + s;
   return s;
+}
+
+// What was typed before Sheets made it a date: "3/1/2026" -> "3/1", "2026-03-01" -> "3/1".
+// Anything else is returned unchanged.
+function undoDate(shown) {
+  const s = String(shown === undefined || shown === null ? "" : shown).trim();
+  let m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-]\d{4}$/.exec(s);
+  if (m) return Number(m[1]) + "/" + Number(m[2]);
+  m = /^\d{4}-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return Number(m[1]) + "/" + Number(m[2]);
+  return s;
+}
+
+// Rewrite single cells of one column: fix(value, shown) returns the new value, or null to keep it.
+function repairColumn(sheet, header, fix) {
+  const c = HEADERS.indexOf(header) + 1;
+  const last = sheet.getLastRow();
+  if (c < 1 || last < 2) return 0;
+  const range = sheet.getRange(2, c, last - 1, 1);
+  const values = range.getValues(), shown = range.getDisplayValues();
+  let n = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = fix(values[i][0], shown[i][0]);
+    if (v === null) continue;
+    sheet.getRange(i + 2, c).setValue(v);
+    n++;
+  }
+  return n;
+}
+
+// The clean-up runs by itself after an update (with the next records), at most every 6 hours.
+function repairIfDue() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get("repaired")) return;
+  repairData();
+  cache.put("repaired", "1", 21600);
+}
+
+// Route numbers such as "3/1" that Sheets turned into dates, put back as typed
+// (in the data tab and the Routes tab).
+function repairData() {
+  const fix = function (v, shown) { return v instanceof Date ? "'" + undoDate(shown) : null; };
+  let n = repairColumn(getDataSheet(), "Route No", fix);
+  const routes = getRoutesSheet();
+  const last = routes.getLastRow();
+  if (last > 1) {
+    const range = routes.getRange(2, 1, last - 1, 1);
+    const values = range.getValues(), shown = range.getDisplayValues();
+    for (let i = 0; i < values.length; i++) {
+      const v = fix(values[i][0], shown[i][0]);
+      if (v !== null) { routes.getRange(i + 2, 1).setValue(v); n++; }
+    }
+  }
+  return n;
 }
 function num(v) {
   if (v === "" || v === null || v === undefined) return "";
@@ -326,7 +384,7 @@ function adminStats() {
     const m = /^(\d{1,2})/.exec(time);
     const hour = m ? ("0" + m[1]).slice(-2) : "??";
     const dir = String(r[col["Direction"]] || "").trim() || "(no direction)";
-    const route = [r[col["Route No"]], r[col["Route End A"]] + " – " + r[col["Route End B"]]].filter(String).join(" · ");
+    const route = [undoDate(r[col["Route No"]]), r[col["Route End A"]] + " – " + r[col["Route End B"]]].filter(String).join(" · ");
     add(st, date, "direction", dir);
     add(st, date, "hour", hour + "|" + dir);
     add(st, date, "route", route + "|" + dir);
@@ -353,6 +411,7 @@ function adminStats() {
 function setup() {
   const sheet = getDataSheet();
   getRoutesSheet();
+  repairData();
   Logger.log("Sheet ready: " + sheet.getParent().getUrl());
 }
 
@@ -363,6 +422,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("A4 Bus Survey")
     .addItem("Build / refresh summary", "buildSummary")
+    .addItem("Fix route numbers shown as dates", "repairData")
     .addToUi();
 }
 
@@ -380,7 +440,7 @@ function buildSummary() {
     const hm = /^(\d{1,2})/.exec(String(row[col["Time"]] || ""));
     const hour = hm ? ("0" + hm[1]).slice(-2) : "??";
     hours[hour] = true;
-    const route = [row[col["Route No"]], row[col["Route End A"]] + " – " + row[col["Route End B"]]].filter(String).join(" · ");
+    const route = [undoDate(row[col["Route No"]]), row[col["Route End A"]] + " – " + row[col["Route End B"]]].filter(String).join(" · ");
     const k = [row[col["Station"]], route, row[col["Direction"]] || "(no direction)"].join("|");
     const g = groups[k] = groups[k] || { total: 0, hours: {}, occ: {} };
     g.total++;
